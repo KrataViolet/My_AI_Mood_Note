@@ -3,17 +3,18 @@ import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
     signInAnonymously, 
-    onAuthStateChanged,
-    signInWithCustomToken
+    onAuthStateChanged
 } from 'firebase/auth';
 import { 
     getFirestore,
     collection,
+    // ... (rest of your firestore imports)
+    doc,
+    setDoc,
     addDoc,
     query,
     where,
     onSnapshot,
-    doc,
     updateDoc,
     increment,
     arrayUnion,
@@ -21,20 +22,34 @@ import {
     orderBy,
     limit,
     deleteDoc,
-    setDoc,
     getDocs
 } from 'firebase/firestore';
 
 // --- Firebase & App Configuration ---
-const firebaseConfig = JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG || '{}');
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// TODO: Replace this with your actual Firebase config object!
+const firebaseConfig = {
+  apiKey: "AIzaSyDASN9aqX9EPjyoDgQlO0AZU_UK57PmVJk",
+  authDomain: "my-ai-mood-note.firebaseapp.com",
+  projectId: "my-ai-mood-note",
+  storageBucket: "my-ai-mood-note.firebasestorage.app",
+  messagingSenderId: "941974695954",
+  appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
+  measurementId: "G-DTVQFBKKV4"
+};
+
+// This is a simple, hardcoded ID for database paths in this public version.
+const appId = 'ai-mood-journal-public'; 
 
 // --- Gemini API Configuration ---
-const GEMINI_API_KEY = ""; // Provided by the environment
+const GEMINI_API_KEY = ""; // This will be empty for the public version
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
 
 // --- API Helper ---
 async function callGeminiAPI(prompt) {
+    // AI functionality will be disabled if the key is empty.
+    if (!GEMINI_API_KEY) {
+        return "AI is currently unavailable.";
+    }
     const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
     const response = await fetch(GEMINI_API_URL, {
         method: 'POST',
@@ -59,11 +74,6 @@ export default function App() {
 
     useEffect(() => {
         try {
-            // Check if firebaseConfig is valid before initializing
-            if (!firebaseConfig.apiKey) {
-                console.error("Firebase config is missing or invalid. Please check your environment variables.");
-                return;
-            }
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
@@ -74,12 +84,8 @@ export default function App() {
                 if (currentUser) {
                     setUser(currentUser);
                 } else {
-                    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    if (initialToken) {
-                        signInWithCustomToken(firebaseAuth, initialToken).catch(() => signInAnonymously(firebaseAuth));
-                    } else {
-                        signInAnonymously(firebaseAuth);
-                    }
+                    // For a public website, we only use anonymous sign-in.
+                    signInAnonymously(firebaseAuth);
                 }
             });
             return () => unsubscribe();
@@ -87,6 +93,7 @@ export default function App() {
             console.error("Firebase initialization error:", error);
         }
     }, []);
+}
 
     const showNotification = useCallback((message, type = 'success') => {
         setNotification({ show: true, message, type });
