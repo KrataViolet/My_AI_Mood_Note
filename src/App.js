@@ -26,8 +26,7 @@ import {
 } from 'firebase/firestore';
 
 // --- Firebase & App Configuration ---
-// This line now securely reads your configuration from the environment variable you'll set in Netlify.
-const firebaseConfig = JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG);
+const firebaseConfig = JSON.parse(process.env.REACT_APP_FIREBASE_CONFIG || '{}');
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- Gemini API Configuration ---
@@ -60,6 +59,11 @@ export default function App() {
 
     useEffect(() => {
         try {
+            // Check if firebaseConfig is valid before initializing
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config is missing or invalid. Please check your environment variables.");
+                return;
+            }
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
