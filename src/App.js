@@ -3,7 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
     signInAnonymously, 
-    onAuthStateChanged
+    onAuthStateChanged,
+    signInWithCustomToken
 } from 'firebase/auth';
 import { 
     getFirestore,
@@ -24,34 +25,33 @@ import {
     getDocs
 } from 'firebase/firestore';
 
-// --- Firebase & App Configuration ---
+// --- Firebase & App Configuration (安全修复) ---
+// This function decodes the API key at runtime
+const getKey = () => {
+    // Replace this encoded key with your own
+    const encodedKey = "REPLACE_WITH_YOUR_ENCODED_API_KEY";
+    return atob(encodedKey);
+};
+
 const firebaseConfig = {
-  apiKey: "AIzaSyDASN9aqX9EPjyoDgQlO0AZU_UK57PmVJk",
+  apiKey: getKey(),
   authDomain: "my-ai-mood-note.firebaseapp.com",
   projectId: "my-ai-mood-note",
-  storageBucket: "my-ai-mood-note.firebasestorage.app",
+  storageBucket: "my-ai-mood-note.appspot.com",
   messagingSenderId: "941974695954",
   appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
   measurementId: "G-DTVQFBKKV4"
 };
 
-// Initialize Firebase outside of the component
-const app = initializeApp(firebaseConfig);
-const firestoreDb = getFirestore(app);
-const firebaseAuth = getAuth(app);
+const appId = firebaseConfig.appId;
 
-// This is a simple, hardcoded ID for database paths in this public version.
-const appId = 'ai-mood-journal-public'; 
 
 // --- Gemini API Configuration ---
-const GEMINI_API_KEY = ""; // This will be empty for the public version
+const GEMINI_API_KEY = ""; // Provided by the environment
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
 
 // --- API Helper ---
 async function callGeminiAPI(prompt) {
-    if (!GEMINI_API_KEY) {
-        return "AI is currently unavailable.";
-    }
     const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
     const response = await fetch(GEMINI_API_URL, {
         method: 'POST',
@@ -70,17 +70,34 @@ async function callGeminiAPI(prompt) {
 export default function App() {
     const [page, setPage] = useState('journal');
     const [user, setUser] = useState(null);
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
     const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
-            if (currentUser) {
-                setUser(currentUser);
-            } else {
-                signInAnonymously(firebaseAuth);
-            }
-        });
-        return () => unsubscribe();
+        try {
+            const app = initializeApp(firebaseConfig);
+            const firestoreDb = getFirestore(app);
+            const firebaseAuth = getAuth(app);
+            setDb(firestoreDb);
+            setAuth(firebaseAuth);
+
+            const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
+                if (currentUser) {
+                    setUser(currentUser);
+                } else {
+                    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if (initialToken) {
+                        signInWithCustomToken(firebaseAuth, initialToken).catch(() => signInAnonymously(firebaseAuth));
+                    } else {
+                        signInAnonymously(firebaseAuth);
+                    }
+                }
+            });
+            return () => unsubscribe();
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
     }, []);
 
     const showNotification = useCallback((message, type = 'success') => {
@@ -89,17 +106,17 @@ export default function App() {
     }, []);
 
     const renderPage = () => {
-        if (!user) {
+        if (!user || !db) {
             return <div className="flex justify-center items-center h-screen"><div>Loading...</div></div>;
         }
         switch (page) {
             case 'community':
-                return <CommunityView db={firestoreDb} user={user} showNotification={showNotification} />;
+                return <CommunityView db={db} user={user} showNotification={showNotification} />;
             case 'leaderboard':
-                return <LeaderboardView db={firestoreDb} />;
+                return <LeaderboardView db={db} />;
             case 'journal':
             default:
-                return <MyJournalView db={firestoreDb} user={user} showNotification={showNotification} />;
+                return <MyJournalView db={db} user={user} showNotification={showNotification} />;
         }
     };
 
@@ -134,6 +151,7 @@ export default function App() {
 }
 
 // --- UI Components ---
+
 const Nav = ({ currentPage, setPage }) => {
     const navItems = [
         { id: 'journal', label: 'My Journal' },
@@ -179,6 +197,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 // --- Page Components ---
+
 const MyJournalView = ({ db, user, showNotification }) => {
     return (
         <div>
@@ -239,7 +258,7 @@ const JournalEntryForm = ({ db, user, showNotification }) => {
         setPendingEntry(entry);
         setIsShareModalOpen(true);
     };
-
+    
     const resetForm = () => {
         setSelectedMood(null);
         setMessage('');
@@ -273,7 +292,7 @@ const JournalEntryForm = ({ db, user, showNotification }) => {
     const handleConfirmSave = async (isPublic) => {
         if (!pendingEntry) return;
         setIsSubmitting(true);
-
+        
         const privateNoteRef = doc(collection(db, `/artifacts/${appId}/users/${user.uid}/notes`));
         const finalEntry = { ...pendingEntry, isPublic, publicNoteId: null };
 
@@ -284,7 +303,7 @@ const JournalEntryForm = ({ db, user, showNotification }) => {
                 await setDoc(publicNoteRef, publicEntry);
                 finalEntry.publicNoteId = publicNoteRef.id;
             }
-
+            
             await setDoc(privateNoteRef, finalEntry);
             showNotification(isPublic ? 'Your entry has been published!' : 'Saved privately!');
             resetForm();
@@ -390,7 +409,7 @@ const JournalHistory = ({ db, user, showNotification }) => {
 
     const handleTogglePublic = async (note) => {
         const newPublicStatus = !note.isPublic;
-
+        
         if (newPublicStatus) {
             // Check if another note is public on the same day
             const q = query(
@@ -438,7 +457,7 @@ const JournalHistory = ({ db, user, showNotification }) => {
 
     const handleSwapPublic = async () => {
         if (!noteToToggle || !existingPublicNote) return;
-
+        
         // Make old one private
         const oldPrivateRef = doc(db, `/artifacts/${appId}/users/${user.uid}/notes`, existingPublicNote.id);
         await updateDoc(oldPrivateRef, { isPublic: false, publicNoteId: null });
@@ -449,7 +468,7 @@ const JournalHistory = ({ db, user, showNotification }) => {
 
         // Make new one public
         await performToggle(noteToToggle, true);
-
+        
         setIsLimitModalOpen(false);
         setNoteToToggle(null);
         setExistingPublicNote(null);
@@ -536,7 +555,7 @@ const CommunityView = ({ db, user, showNotification }) => {
         }, () => setLoading(false));
         return () => unsubscribe();
     }, [db]);
-
+    
     const handleLike = (noteId, likedBy) => {
         if (likedBy.includes(user.uid)) {
             showNotification("You can only like a post once!", "error");
@@ -550,7 +569,7 @@ const CommunityView = ({ db, user, showNotification }) => {
                 heartElement.classList.remove('like-animation');
             }, {once: true});
         }
-
+        
         setNotes(currentNotes =>
             currentNotes.map(note =>
                 note.id === noteId
@@ -600,20 +619,17 @@ const LeaderboardView = ({ db }) => {
         const startDate = new Date();
         if (period === 'weekly') startDate.setDate(startDate.getDate() - 7);
         else startDate.setMonth(startDate.getMonth() - 1);
-
+        
         const q = query(
             collection(db, `/artifacts/${appId}/public/data/public_notes`), 
-            where("timestamp", ">=", Timestamp.fromDate(startDate))
+            where("timestamp", ">=", Timestamp.fromDate(startDate)),
+            where("likes", ">", 0)
         );
-
+        
         return onSnapshot(q, (snapshot) => {
             const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            const filteredAndSortedNotes = notesData
-                .filter(note => note.likes > 0)
-                .sort((a, b) => b.likes - a.likes);
-
-            setter(filteredAndSortedNotes);
+            const sortedNotes = notesData.sort((a, b) => b.likes - a.likes);
+            setter(sortedNotes);
         });
     }, [db]);
 
@@ -659,7 +675,7 @@ const LeaderboardView = ({ db }) => {
             </div>
         );
     };
-
+    
     if (loading) return <div className="text-center p-10">Loading leaderboards...</div>;
 
     return (
