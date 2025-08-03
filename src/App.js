@@ -26,8 +26,15 @@ import {
 } from 'firebase/firestore';
 
 // --- Firebase & App Configuration ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = {
+  apiKey: "AIzaSyDASN9aqX9EPjyoDgQlO0AZU_UK57PmVJk",
+  authDomain: "my-ai-mood-note.firebaseapp.com",
+  projectId: "my-ai-mood-note",
+  storageBucket: "my-ai-mood-note.firebasestorage.app",
+  messagingSenderId: "941974695954",
+  appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
+  measurementId: "G-DTVQFBKKV4"
+};
 
 // --- Gemini API Configuration ---
 const GEMINI_API_KEY = ""; // Provided by the environment
