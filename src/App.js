@@ -35,6 +35,7 @@ const firebaseConfig = {
   appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
   measurementId: "G-DTVQFBKKV4"
 };
+const app = initializeApp(firebaseConfig);
 
 // --- Gemini API Configuration ---
 const GEMINI_API_KEY = ""; // Provided by the environment
