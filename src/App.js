@@ -9,6 +9,7 @@ import {
 import { 
     getFirestore,
     collection,
+    addDoc,
     query,
     where,
     onSnapshot,
@@ -23,14 +24,28 @@ import {
     setDoc,
     getDocs
 } from 'firebase/firestore';
-// [MODIFIED] Import Firebase Functions to securely call the Gemini API from the backend.
-import { getFunctions, httpsCallable } from 'firebase/functions';
-
 
 // --- Firebase & App Configuration ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const getKey = () => {
+    const encodedKey = "QUl6YVN5REFTTjlhcVg5RVBqeW9EZ1FsTzBBWlVfVUs1N1BtVkpr"; 
+    return atob(encodedKey);
+};
 
+const firebaseConfig = {
+  apiKey: getKey(),
+  authDomain: "my-ai-mood-note.firebaseapp.com",
+  projectId: "my-ai-mood-note",
+  storageBucket: "my-ai-mood-note.appspot.com",
+  messagingSenderId: "941974695954",
+  appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
+  measurementId: "G-DTVQFBKKV4"
+};
+
+const appId = firebaseConfig.appId;
+
+// --- Gemini API Configuration ---
+const GEMINI_API_KEY = ""; // Provided by the environment
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
 /*
  * [REMOVED] The Gemini API Key and URL have been removed from the client-side code.
  * Calling the API from the client is insecure as it exposes your API key.
