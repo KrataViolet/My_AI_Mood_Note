@@ -38,7 +38,7 @@ const firebaseConfig = {
 const appId = 'my-ai-mood-note';
 
 // --- Gemini API Configuration ---
-const GEMINI_API_KEY = "AIzaSyD6MjMvj8j49keWJUY5OlFCCUc2AKdc3nQ"; // Provided by the environment
+const GEMINI_API_KEY = ""; // Provided by the environment
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
 
 // --- API Helper ---
