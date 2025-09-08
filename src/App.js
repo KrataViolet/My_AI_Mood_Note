@@ -66,30 +66,27 @@ export default function App() {
     const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
     useEffect(() => {
-        try {
-            const app = initializeApp(firebaseConfig);
-            const firestoreDb = getFirestore(app);
-            const firebaseAuth = getAuth(app);
-            setDb(firestoreDb);
-            setAuth(firebaseAuth);
+    try {
+        const app = initializeApp(firebaseConfig);
+        const firestoreDb = getFirestore(app);
+        const firebaseAuth = getAuth(app);
+        setDb(firestoreDb);
+        setAuth(firebaseAuth);
 
-            const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
-                if (currentUser) {
-                    setUser(currentUser);
-                } else {
-                    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    if (initialToken) {
-                        signInWithCustomToken(firebaseAuth, initialToken).catch(() => signInAnonymously(firebaseAuth));
-                    } else {
-                        signInAnonymously(firebaseAuth);
-                    }
-                }
-            });
-            return () => unsubscribe();
-        } catch (error) {
-            console.error("Firebase initialization error:", error);
-        }
-    }, []);
+        const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+            } else {
+                signInAnonymously(firebaseAuth).catch(error => {
+                    console.error("Anonymous sign-in failed:", error);
+                });
+            }
+        });
+        return () => unsubscribe();
+    } catch (error) {
+        console.error("Firebase initialization error:", error);
+    }
+}, []);
 
     const showNotification = useCallback((message, type = 'success') => {
         setNotification({ show: true, message, type });
