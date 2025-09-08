@@ -24,130 +24,38 @@ import {
     setDoc,
     getDocs
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions'; 
 
 // --- Firebase & App Configuration ---
-const getKey = () => {
-    const encodedKey = "QUl6YVN5REFTTjlhcVg5RVBqeW9EZ1FsTzBBWlVfVUs1N1BtVkpr"; 
-    return atob(encodedKey);
-};
-
 const firebaseConfig = {
-  apiKey: getKey(),
-  authDomain: "my-ai-mood-note.firebaseapp.com",
-  projectId: "my-ai-mood-note",
-  storageBucket: "my-ai-mood-note.appspot.com",
-  messagingSenderId: "941974695954",
-  appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
-  measurementId: "G-DTVQFBKKV4"
+    apiKey: "AIzaSyDASN9aqXEpPjyoDgO100AZU_UK57PMVjk",
+    authDomain: "my-ai-mood-note.firebaseapp.com",
+    projectId: "my-ai-mood-note",
+    storageBucket: "my-ai-mood-note.firebaseapp.com",
+    messagingSenderId: "941974695954",
+    appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
+    measurementId: "G-DTVQFBKKV4"
 };
-
-const appId = firebaseConfig.appId;
+const appId = 'my-ai-mood-note';
 
 // --- Gemini API Configuration ---
 const GEMINI_API_KEY = ""; // Provided by the environment
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
 
-async function callGeminiViaFunction(functions, prompt) {
-    // If functions aren't initialized, we can't proceed.
-    if (!functions) {
-        throw new Error("Firebase Functions is not initialized.");
+// --- API Helper ---
+async function callGeminiAPI(prompt) {
+    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+    const response = await fetch(GEMINI_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+    const result = await response.json();
+    if (result.candidates && result.candidates.length > 0) {
+        return result.candidates[0].content.parts[0].text.trim();
     }
-
-    // 'getAiJournalEntry' is the name of the Cloud Function you need to create in your Firebase project.
-    const getAiJournalEntry = httpsCallable(functions, 'getAiJournalEntry');
-    
-    try {
-        // Call the function with the prompt.
-        const result = await getAiJournalEntry({ prompt: prompt });
-        // The result.data will be the text string returned from your Cloud Function.
-        if (result.data && typeof result.data === 'string') {
-            return result.data.trim();
-        }
-        // Handle cases where the function returns an unexpected result.
-        throw new Error("Invalid response from Cloud Function.");
-    } catch (error) {
-        // Log the detailed error for debugging and show a generic message to the user.
-        console.error("Error calling Cloud Function:", error);
-        throw new Error("AI service is unavailable right now.");
-    }
+    throw new Error("No content generated from API.");
 }
-
-/*
- * =====================================================================================
- * IMPORTANT: BACKEND CODE (Firebase Cloud Function)
- * =====================================================================================
- * You MUST deploy the following code as a Firebase Cloud Function for the AI feature to work.
- *
- * 1. Set up Cloud Functions in your project: `firebase init functions`
- * 2. Select TypeScript or JavaScript.
- * 3. Replace the contents of `index.ts` (or `index.js`) with the code below.
- * 4. Set your Gemini API key securely: `firebase functions:config:set gemini.key="YOUR_API_KEY"`
- * 5. Deploy the function: `firebase deploy --only functions`
- *
- * --- Code for `functions/src/index.ts` (TypeScript) ---
- *
- * import * as functions from "firebase-functions";
- * import * as logger from "firebase-functions/logger";
- * import {initializeApp} from "firebase-admin/app";
- * import {VertexAI} from "@google-cloud/vertexai";
- *
- * initializeApp();
- *
- * // Initialize Vertex AI with your Google Cloud project and location
- * const vertexAI = new VertexAI({
- * project: process.env.GCLOUD_PROJECT || "YOUR_PROJECT_ID",
- * location: "us-central1",
- * });
- *
- * // Instantiate the model
- * const generativeModel = vertexAI.getGenerativeModel({
- * model: "gemini-1.0-pro-001",
- * });
- *
- * export const getAiJournalEntry = functions.https.onCall(async (data, context) => {
- * // Ensure the user is authenticated to prevent abuse.
- * if (!context.auth) {
- * throw new functions.https.HttpsError(
- * "unauthenticated",
- * "The function must be called while authenticated."
- * );
- * }
- *
- * const prompt = data.prompt;
- * if (!prompt || typeof prompt !== "string") {
- * throw new functions.https.HttpsError(
- * "invalid-argument",
- * "The function must be called with a valid 'prompt' string."
- * );
- * }
- *
- * logger.info(`Received prompt: ${prompt}`);
- *
- * try {
- * const resp = await generativeModel.generateContent(prompt);
- * const content = resp.response.candidates?.[0]?.content?.parts?.[0]?.text;
- *
- * if (content) {
- * logger.info("Successfully generated content from Gemini API.");
- * return content;
- * } else {
- * logger.error("Gemini API returned no content.");
- * throw new functions.https.HttpsError(
- * "internal",
- * "Failed to generate content from AI service."
- * );
- * }
- * } catch (error) {
- * logger.error("Error calling Gemini API:", error);
- * throw new functions.https.HttpsError(
- * "internal",
- * "An error occurred while contacting the AI service."
- * );
- * }
- * });
- * =====================================================================================
- */
 
 // --- Main App Component ---
 export default function App() {
@@ -155,8 +63,6 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [db, setDb] = useState(null);
     const [auth, setAuth] = useState(null);
-    // [NEW] State for Firebase Functions instance.
-    const [functions, setFunctions] = useState(null);
     const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
     useEffect(() => {
@@ -164,12 +70,8 @@ export default function App() {
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
-            // [NEW] Initialize Firebase Functions.
-            const firebaseFunctions = getFunctions(app);
-
             setDb(firestoreDb);
             setAuth(firebaseAuth);
-            setFunctions(firebaseFunctions); // [NEW] Set the functions instance in state.
 
             const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
                 if (currentUser) {
@@ -195,20 +97,17 @@ export default function App() {
     }, []);
 
     const renderPage = () => {
-        // [MODIFIED] Wait for functions to be initialized as well.
-        if (!user || !db || !functions) {
+        if (!user || !db) {
             return <div className="flex justify-center items-center h-screen"><div>Loading...</div></div>;
         }
         switch (page) {
             case 'community':
-                // Pass functions down to components that need it.
                 return <CommunityView db={db} user={user} showNotification={showNotification} />;
             case 'leaderboard':
                 return <LeaderboardView db={db} />;
             case 'journal':
             default:
-                // [MODIFIED] Pass functions instance to MyJournalView.
-                return <MyJournalView db={db} user={user} showNotification={showNotification} functions={functions} />;
+                return <MyJournalView db={db} user={user} showNotification={showNotification} />;
         }
     };
 
@@ -279,7 +178,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm m-4 relative">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm m-4">
                 <h3 className="text-lg font-bold mb-4">{title}</h3>
                 <div>{children}</div>
                 <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
@@ -290,19 +189,16 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
 // --- Page Components ---
 
-// [MODIFIED] Receive `functions` prop.
-const MyJournalView = ({ db, user, showNotification, functions }) => {
+const MyJournalView = ({ db, user, showNotification }) => {
     return (
         <div>
-            {/* [MODIFIED] Pass `functions` prop down. */}
-            <JournalEntryForm db={db} user={user} showNotification={showNotification} functions={functions} />
+            <JournalEntryForm db={db} user={user} showNotification={showNotification} />
             <JournalHistory db={db} user={user} showNotification={showNotification} />
         </div>
     );
 };
 
-// [MODIFIED] Receive `functions` prop.
-const JournalEntryForm = ({ db, user, showNotification, functions }) => {
+const JournalEntryForm = ({ db, user, showNotification }) => {
     const [selectedMood, setSelectedMood] = useState(null);
     const [message, setMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -325,12 +221,10 @@ const JournalEntryForm = ({ db, user, showNotification, functions }) => {
         setIsAiWriting(true);
         try {
             const prompt = `My mood today is ${selectedMood.text} (${selectedMood.icon}). Please write a short, creative journal entry starter for me in English, under 25 words.`;
-            // [MODIFIED] Use the new secure function to call the API.
-            const generatedText = await callGeminiViaFunction(functions, prompt);
+            const generatedText = await callGeminiAPI(prompt);
             setMessage(generatedText);
         } catch (error) {
-            // The error message from `callGeminiViaFunction` is user-friendly.
-            showNotification(error.message, 'error');
+            showNotification('AI service is unavailable right now.', 'error');
         } finally {
             setIsAiWriting(false);
         }
@@ -405,7 +299,6 @@ const JournalEntryForm = ({ db, user, showNotification, functions }) => {
             showNotification(isPublic ? 'Your entry has been published!' : 'Saved privately!');
             resetForm();
         } catch (error) {
-            console.error("Error saving note: ", error);
             showNotification('Failed to save. Please try again.', 'error');
             setIsSubmitting(false);
         }
@@ -422,12 +315,11 @@ const JournalEntryForm = ({ db, user, showNotification, functions }) => {
                 const oldPublicRef = doc(db, `/artifacts/${appId}/public/data/public_notes`, existingPublicNote.publicNoteId);
                 await deleteDoc(oldPublicRef);
             }
-            // Save new note as public, which will close the modals and reset the form on success.
+            // Save new note as public
             await handleConfirmSave(true);
         } catch (error) {
-            console.error("Error swapping public notes: ", error);
             showNotification('Failed to swap entries. Please try again.', 'error');
-            // Only reset state if the operation failed.
+        } finally {
             setIsSubmitting(false);
             resetForm();
         }
@@ -447,7 +339,7 @@ const JournalEntryForm = ({ db, user, showNotification, functions }) => {
                 </div>
                 <div className="flex justify-between items-center mb-2">
                     <label className="font-semibold text-gray-600">Your thoughts:</label>
-                    <button onClick={handleAiWrite} disabled={isAiWriting || !functions} className="flex items-center gap-2 text-sm bg-purple-600 text-white px-3 py-1 rounded-full hover:bg-purple-700 transition-colors disabled:bg-purple-300 disabled:cursor-not-allowed">
+                    <button onClick={handleAiWrite} disabled={isAiWriting} className="flex items-center gap-2 text-sm bg-purple-600 text-white px-3 py-1 rounded-full hover:bg-purple-700 transition-colors disabled:bg-purple-300">
                         {isAiWriting ? <Spinner/> : '✨'}
                         AI Write for Me
                     </button>
@@ -475,7 +367,7 @@ const JournalEntryForm = ({ db, user, showNotification, functions }) => {
                     </button>
                 </div>
             </Modal>
-            <Modal isOpen={isLimitModalOpen} onClose={resetForm} title="Daily Public Limit Reached">
+            <Modal isOpen={isLimitModalOpen} onClose={() => setIsLimitModalOpen(false)} title="Daily Public Limit Reached">
                 <p className="text-gray-600 mb-4 text-sm">You already have a public note today. What would you like to do?</p>
                 <div className="space-y-3">
                     <button onClick={handleSwapPublic} disabled={isSubmitting} className="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors flex justify-center items-center">
@@ -502,9 +394,6 @@ const JournalHistory = ({ db, user, showNotification }) => {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching history: ", error);
-            setLoading(false);
         });
         return () => unsubscribe();
     }, [db, user.uid]);
@@ -521,11 +410,9 @@ const JournalHistory = ({ db, user, showNotification }) => {
                 limit(1)
             );
             const querySnapshot = await getDocs(q);
-            const otherPublicNote = querySnapshot.docs.find(doc => doc.id !== note.id);
-
-            if (otherPublicNote) {
+            if (!querySnapshot.empty) {
                 setNoteToToggle(note);
-                setExistingPublicNote({id: otherPublicNote.id, ...otherPublicNote.data()});
+                setExistingPublicNote({id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data()});
                 setIsLimitModalOpen(true);
                 return;
             }
@@ -555,7 +442,6 @@ const JournalHistory = ({ db, user, showNotification }) => {
                 showNotification("Entry is now private.");
             }
         } catch (error) {
-            console.error("Error toggling public status: ", error);
             showNotification("Failed to update status.", "error");
         }
     };
@@ -643,19 +529,21 @@ const CommunityView = ({ db, user, showNotification }) => {
         today.setHours(0, 0, 0, 0);
         const startOfToday = Timestamp.fromDate(today);
 
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const startOfTomorrow = Timestamp.fromDate(tomorrow);
+
         const notesQuery = query(
             collection(db, `/artifacts/${appId}/public/data/public_notes`), 
             where("timestamp", ">=", startOfToday),
+            where("timestamp", "<", startOfTomorrow),
             orderBy("timestamp", "desc")
         );
 
         const unsubscribe = onSnapshot(notesQuery, (snapshot) => {
             setNotes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching community notes: ", error);
-            setLoading(false);
-        });
+        }, () => setLoading(false));
         return () => unsubscribe();
     }, [db]);
     
@@ -682,18 +570,7 @@ const CommunityView = ({ db, user, showNotification }) => {
         );
 
         const noteRef = doc(db, `/artifacts/${appId}/public/data/public_notes`, noteId);
-        updateDoc(noteRef, { likes: increment(1), likedBy: arrayUnion(user.uid) }).catch(error => {
-            console.error("Error liking post: ", error);
-            showNotification("Failed to like post.", "error");
-            // Revert optimistic update on failure
-            setNotes(currentNotes =>
-                currentNotes.map(note =>
-                    note.id === noteId
-                        ? { ...note, likes: note.likes - 1, likedBy: note.likedBy.filter(id => id !== user.uid) }
-                        : note
-                )
-            );
-        });
+        updateDoc(noteRef, { likes: increment(1), likedBy: arrayUnion(user.uid) });
     };
 
     if (loading) return <div className="text-center p-10">Loading today's community entries...</div>;
@@ -712,7 +589,7 @@ const CommunityView = ({ db, user, showNotification }) => {
                                 <p className="text-gray-700">{note.message}</p>
                                 <div className="text-xs text-gray-400 mt-2">From an anonymous friend</div>
                             </div>
-                            <button onClick={() => handleLike(note.id, note.likedBy)} disabled={note.likedBy.includes(user.uid)} className="flex items-center gap-2 text-gray-500 disabled:text-red-500 transition-colors py-1 px-2 rounded-full hover:bg-red-100 disabled:cursor-not-allowed">
+                            <button onClick={() => handleLike(note.id, note.likedBy)} disabled={note.likedBy.includes(user.uid)} className="flex items-center gap-2 text-gray-500 disabled:text-red-500 transition-colors py-1 px-2 rounded-full hover:bg-red-100">
                                 <span className={`like-icon ${note.likedBy.includes(user.uid) ? 'text-red-500' : ''}`}>❤️</span>
                                 <span className="font-semibold">{note.likes}</span>
                             </button>
@@ -731,31 +608,25 @@ const LeaderboardView = ({ db }) => {
 
     const fetchTopNotes = useCallback((period, setter) => {
         const startDate = new Date();
-        if (period === 'weekly') {
-            startDate.setDate(startDate.getDate() - 7);
-        } else { // monthly
-            startDate.setMonth(startDate.getMonth() - 1);
-        }
+        if (period === 'weekly') startDate.setDate(startDate.getDate() - 7);
+        else startDate.setMonth(startDate.getMonth() - 1);
         
+        // Corrected Query: Only filter by one range field on the server.
         const q = query(
             collection(db, `/artifacts/${appId}/public/data/public_notes`), 
             where("timestamp", ">=", Timestamp.fromDate(startDate))
         );
         
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        return onSnapshot(q, (snapshot) => {
             const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // Filter for notes with likes and sort on the client side
+            // Filter and sort on the client side
             const filteredAndSortedNotes = notesData
                 .filter(note => note.likes > 0)
                 .sort((a, b) => b.likes - a.likes);
 
             setter(filteredAndSortedNotes);
-        }, (error) => {
-            console.error(`Error fetching ${period} leaderboard: `, error);
         });
-
-        return unsubscribe;
     }, [db]);
 
     useEffect(() => {
@@ -763,10 +634,7 @@ const LeaderboardView = ({ db }) => {
         const unsubWeekly = fetchTopNotes('weekly', setWeeklyNotes);
         const unsubMonthly = fetchTopNotes('monthly', setMonthlyNotes);
         setLoading(false);
-        return () => { 
-            unsubWeekly(); 
-            unsubMonthly(); 
-        };
+        return () => { unsubWeekly(); unsubMonthly(); };
     }, [fetchTopNotes]);
 
     const LeaderboardList = ({ title, notes }) => {
@@ -776,7 +644,7 @@ const LeaderboardView = ({ db }) => {
         return (
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
                 <h3 className="text-xl font-bold mb-4 text-center">{title}</h3>
-                {loading ? <p className="text-center text-gray-500">Loading...</p> : notes.length === 0 ? (
+                {notes.length === 0 ? (
                      <p className="text-center text-gray-500">No popular notes yet.</p>
                 ) : (
                     <>
@@ -804,6 +672,8 @@ const LeaderboardView = ({ db }) => {
         );
     };
     
+    if (loading) return <div className="text-center p-10">Loading leaderboards...</div>;
+
     return (
         <div>
             <h2 className="text-center text-2xl font-bold mb-6">🏆 Popularity Leaderboards 🏆</h2>
