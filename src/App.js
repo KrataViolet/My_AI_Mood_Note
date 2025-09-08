@@ -27,10 +27,10 @@ import {
 
 // --- Firebase & App Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSyDASN9aqXEpPjyoDgO100AZU_UK57PMVjk",
+    apiKey: "AIzaSyDASN9aqX9EPjyoDgQlO0AZU_UK57PmVJk",
     authDomain: "my-ai-mood-note.firebaseapp.com",
     projectId: "my-ai-mood-note",
-    storageBucket: "my-ai-mood-note.firebaseapp.com",
+    storageBucket: "my-ai-mood-note.firebasestorage.app",
     messagingSenderId: "941974695954",
     appId: "1:941974695954:web:6ecb1a67b878fb3b4728cb",
     measurementId: "G-DTVQFBKKV4"
