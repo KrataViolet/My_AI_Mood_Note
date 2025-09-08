@@ -2,7 +2,7 @@
   "name": "ai-mood-journal",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://KrataViolet.github.io/My_AI_Mood_Note",
+  "homepage": "https://krataviolet.github.io/My_AI_Mood_Note/",
   "dependencies": {
     "firebase": "^10.12.2",
     "react": "^18.3.1",
